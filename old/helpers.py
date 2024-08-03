@@ -24,3 +24,7 @@ def load_map(identity: str):
         data = json.load(f)[identity]
         data = {int(k): v for k, v in data.items()}
         return data
+    
+def refactor_date(date: str):
+    d, m, y = date.split('.')
+    return f'{y}-{m}-{d}'

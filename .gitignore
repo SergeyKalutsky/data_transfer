@@ -2,3 +2,4 @@
 credentials.py
 __pucache__/*
 __pycache__
+*.csv

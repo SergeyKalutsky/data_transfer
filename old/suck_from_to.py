@@ -1,9 +1,10 @@
 import re
 import pyodbc
-import recs as r
+import old.recs as r
+from time import sleep
 from tqdm import tqdm
 from datetime import datetime
-from helpers import load_map, save_map, calculate_age
+from old.helpers import load_map, save_map, calculate_age, refactor_date
 
 cnxn = pyodbc.connect(
     Trusted_Connection='Yes',
@@ -13,14 +14,15 @@ cnxn = pyodbc.connect(
 )
 
 
-def populate_cities():
+def populate_cities(branches):
+    print('Заполняем города')
     cities_map = {}
-    branches = r.get_branches()
     khazakhstan_id = 4
     res = cnxn.execute(
         f'SELECT HierarchyId FROM Country WHERE Id = {khazakhstan_id}')
     hierarchy_id = res.fetchone()[0]
     for branch in branches['items']:
+        print(f'Добавляем город {branch["name"]}')
         cnxn.execute(f'''INSERT INTO LocationHierarchy (ParentId, LocationType)
                     VALUES ({hierarchy_id}, 2)''')
         new_hierarchy_id = cnxn.execute(
@@ -33,11 +35,11 @@ def populate_cities():
     save_map(cities_map, 'cities')
 
 
-def populate_venues():
+def populate_venues(branches):
     cities_map = load_map('cities')
     venues_map = {}
-    branches = r.get_branches()
     for branch in branches['items']:
+        print(f'Заполняем локации для {branch["name"]}')
         city_id = cities_map[branch['id']]
         locations = r.get_locations(branch_id=branch['id'])
         for location in locations['items']:
@@ -52,13 +54,13 @@ def populate_venues():
                             VALUES ('{name}','{name}','{name}', {city_id}, {new_hierarchy_id})''')
             venue_id = cnxn.execute("SELECT SCOPE_IDENTITY()").fetchone()[0]
             venues_map[location['id']] = int(venue_id)
+        sleep(10)
     cnxn.commit()
     save_map(venues_map, 'venues')
 
 
-def populate_teachers():
+def populate_teachers(branches):
     cities_map = load_map('cities')
-    branches = r.get_branches()
     teacher_map = {}
     for branch in branches['items']:
         branch_id = branch['id']
@@ -112,15 +114,15 @@ def populate_teachers():
                 teacher_map[teacher['id']] = [
                     int(teacher_id), int(employee_id)]
                 page += 1
+                sleep(10)
     cnxn.commit()
     save_map(teacher_map, 'teachers')
 
 
-def populate_tariffs():
+def populate_tariffs(branches):
     print('Заполняем таблицу Tariff')
     cities_map = load_map('cities')
     tariff_map = {}
-    branches = r.get_branches()
     for branch in branches['items']:
         branch_id = branch['id']
         page = 0
@@ -147,6 +149,7 @@ def populate_tariffs():
                                 VALUES ({city_id}, {tariff_id})''')
                 tariff_map[tariff['id']] = int(tariff_id)
             page += 1
+            sleep(10)
     cnxn.commit()
     save_map(tariff_map, 'tariffs')
 
@@ -163,10 +166,9 @@ def populate_subjects():
     save_map(subject_map, 'subjects')
 
 
-def populate_students():
+def populate_students(branches):
     cities_map = load_map('cities')
     student_map = {}
-    branches = r.get_branches()
     for branch in branches['items']:
         branch_id = branch['id']
         print(f'Добавляем данные по студентам по городу {branch["name"]}')
@@ -226,11 +228,12 @@ def populate_students():
                                 VALUES ({student_id}, {parent_id}, 5)''')
                 student_map[student['id']] = int(student_id)
             page += 1
+            sleep(10)
     cnxn.commit()
     save_map(student_map, 'students')
 
 
-def populate_group_init():
+def populate_group_init(branches):
     group_map = {}
     cities_map = load_map('cities')
     branches = r.get_branches()
@@ -251,47 +254,28 @@ def populate_group_init():
                 group_name = group['name']
                 bo_id = group['custom_bogrouplink'].split(
                     '/')[-1].split('#')[0]
-                admin_name = group['custom_group_admin']
                 d, m, y = group['b_date'].split('.')
-                create_date = f'{y}-{m}-{d}'
-                admin_name_split = admin_name.split(' ')
-                if len(admin_name_split) == 3:
-                    last_name_admin, first_name_admin, _ = admin_name_split
-                else:
-                    last_name_admin, first_name_admin = admin_name_split
+                # create_date = f'{y}-{m}-{d}'
                 city_id = cities_map[group['branch_ids'][0]]
-                cnxn.execute(f'''INSERT INTO Person 
-                                (LastName, FirstName, CreateDate, CommonName, CreateType)
-                                VALUES ('{last_name_admin}', '{first_name_admin}', '{datetime.now().date()}', '{admin_name}', 5)''')
-                person_id = cnxn.execute(
-                    "SELECT SCOPE_IDENTITY()").fetchone()[0]
-                cnxn.execute(
-                    f'INSERT INTO Employee (PersonId, EmployeeStatus) VALUES ({person_id}, 0)')
-                employee_id = cnxn.execute(
-                    "SELECT SCOPE_IDENTITY()").fetchone()[0]
-                cnxn.execute(
-                    f"INSERT INTO EmployeeAdmin (EmployeeId, JobStatus, StartDate) VALUES ({employee_id}, 0, '{create_date}')")
-                admin_id = cnxn.execute(
-                    "SELECT SCOPE_IDENTITY()").fetchone()[0]
                 if bo_id and 'meet.jit.si' not in group['custom_bogrouplink']:
-                    cnxn.execute(f'''INSERT INTO [Group] (boId, Name, DisplayName, CreateDate, TeacherId, AdminId, GroupStatus, CityId) 
-                                VALUES ({bo_id}, '{group_name}', '{group_name}', '{datetime.now().date()}', {teacher_id}, {admin_id}, 1, {city_id})''')
+                    cnxn.execute(f'''INSERT INTO [Group] (boId, Name, DisplayName, CreateDate, TeacherId, GroupStatus, CityId) 
+                                VALUES ({bo_id}, '{group_name}', '{group_name}', '{datetime.now().date()}', {teacher_id}, 1, {city_id})''')
                 else:
-                    cnxn.execute(f'''INSERT INTO [Group] (Name, DisplayName, CreateDate, TeacherId, AdminId, GroupStatus, CityId) 
-                                VALUES ('{group_name}', '{group_name}', '{datetime.now().date()}', {teacher_id}, {admin_id}, 1, {city_id})''')
+                    cnxn.execute(f'''INSERT INTO [Group] (Name, DisplayName, CreateDate, TeacherId, GroupStatus, CityId) 
+                                VALUES ('{group_name}', '{group_name}', '{datetime.now().date()}', {teacher_id}, 1, {city_id})''')
                 group_id = cnxn.execute(
                     "SELECT SCOPE_IDENTITY()").fetchone()[0]
                 group_map[group['id']] = int(group_id)
             page += 1
+            sleep(10)
     cnxn.commit()
     save_map(group_map, 'groups')
 
 
-def populate_schedules():
+def populate_schedules(branches):
     groups_map = load_map('groups')
     teacher_map = load_map('teachers')
     subjects_map = load_map('subjects')
-    branches = r.get_branches()
     for branch in branches['items']:
         branch_id = branch['id']
         page = 0
@@ -319,25 +303,22 @@ def populate_schedules():
                 duration = int((end_time - start_time).total_seconds() / 60)
                 hour = start_time.hour
                 minute = start_time.minute
-                week_day = schedule['day']
+                week_day = schedule['day'] - 1
                 course_id = subjects_map[schedule['subject_id']]
                 cnxn.execute(
                     f'''UPDATE [GROUP] set CourseId = {course_id} WHERE id={group_id}''')
-                admin_id = cnxn.execute(
-                    f'''SELECT AdminId FROM [Group] WHERE id={group_id}''').fetchone()[0]
-                cnxn.execute(f'''INSERT INTO Schedule (GroupId, TeacherId, AdminId, Minute, Hour, WeekDay, Duration, StartDate, EndDate, Status)
-                            VALUES ({group_id}, {teacher_id[0]}, {admin_id}, {minute}, {hour}, {week_day}, {duration}, '{start_date}', '{end_date}', 0)''')
+                cnxn.execute(f'''INSERT INTO Schedule (GroupId, TeacherId, Minute, Hour, WeekDay, Duration, StartDate, EndDate, Status)
+                            VALUES ({group_id}, {teacher_id[0]}, {minute}, {hour}, {week_day}, {duration}, '{start_date}', '{end_date}', 0)''')
                 cnxn.commit()
             page += 1
+            sleep(10)
 
 
-def students_to_group():
+def students_to_group(branches):
     student_map = load_map('students')
     group_map = load_map('groups')
     reversed_group_map = {v: k for k, v in group_map.items()}
     cities_map = load_map('cities')
-    city_ids = cnxn.execute('SELECT id from City').fetchall()
-    branches = r.get_branches()
     for branch in branches['items']:
         print(f's2g в городе {branch["name"]}')
         branch_id = branch['id']
@@ -361,16 +342,124 @@ def students_to_group():
                 else:
                     cnxn.execute(f'''INSERT INTO Student2Group (GroupId, StudentId, JoinDate)
                                 VALUES ({group_id}, {student_id}, '{join_date}')''')
+                sleep(10)
     cnxn.commit()
 
+
+def populate_student_tariff(branches):
+    tariffs_map = load_map('tariffs')
+    students_map = load_map('students')
+    reversed_students_map = {v: k for k,v in students_map.items()}
+    cities_map = load_map('cities')
+    for branch in branches['items']:
+        branch_id = branch['id']
+        city_id = cities_map[branch_id]
+        student_ids = cnxn.execute(f'''SELECT StudentId FROM Student2City WHERE CityId = {city_id}''').\
+            fetchall()
+        student_ids = [i[0] for i in student_ids]
+        print(f'Загрзужаем тарифы для студентов по городу {branch["name"]}')
+        for student_id in tqdm(student_ids):
+            if student_id not in reversed_students_map:
+                continue
+            customer_id = reversed_students_map[student_id]
+            tariffs = r.get_customer_tariffs(branch_id, customer_id)
+            for tariff in tariffs['items']:
+                if tariff['tariff_id'] not in tariffs_map:
+                    print(tariff)
+                    continue
+                db_tariff_id = tariffs_map[tariff['tariff_id']]
+                db_tariff_price, db_tariff_lessons_left = cnxn.execute(f'''SELECT Price, LessonCount FROM tariff WHERE id = {db_tariff_id}''').fetchone()
+                start_date = refactor_date(tariff['b_date'])
+                # end_date = refactor_date(tariff['e_date'])
+                cnxn.execute(f'''INSERT INTO Tariff2Student (TariffId, StudentId, LessonLeft, StartDate, LessonCount, Price, PriceLeft)
+                            VALUES ({db_tariff_id}, {student_id}, {db_tariff_lessons_left}, '{start_date}', {db_tariff_lessons_left}, {db_tariff_price}, {db_tariff_price})''')
+        sleep(10)
+        cnxn.commit()
 
 def update_group_start_date():
-    sql = '''SET [Group].StartDate = t.StartDate
-        FROM [Group]
-        INNER JOIN (
-            SELECT GroupId, MIN(StartDate) AS StartDate
-            FROM Schedule s
-            GROUP BY GroupId
-        ) AS t ON [Group].id = t.GroupId;'''
+    sql = '''UPDATE [Group]
+            SET [Group].StartDate = tt.StartDate,
+                [Group].LessonDuration = tt.Duration
+                    FROM [Group]
+                    INNER JOIN (
+                        SELECT DISTINCT t.GroupId, t.StartDate, s.Duration FROM (
+                        SELECT GroupId, MIN(StartDate) AS StartDate
+                        FROM Schedule s
+                        GROUP BY GroupId) t
+                        RIGHT JOIN Schedule s ON
+                        s.StartDate = t.StartDate and 
+                        s.GroupId = t.GroupId
+                        WHERE t.GroupId is not null
+                    ) AS tt ON [Group].id = tt.GroupId;'''
     cnxn.execute(sql)
     cnxn.commit()
+    cnxn.execute('''DELETE FROM [Group] WHERE StartDate is null''')
+    cnxn.commit()
+    
+
+def populate_indiv_groups(branches):
+    indiv_group_map = {}
+    cities_map = load_map('cities')
+    students_map = load_map('students')
+    teacher_map = load_map('teachers')
+    subjects_map = load_map('subjects')
+    for branch in branches['items']:
+        branch_id = branch['id']
+        city_id =cities_map[branch['id']]
+        page = 0
+        print(f'Загружаем индивидуальные группы с города {branch["name"]}')
+        while True:
+            schedules = r.get_reg_lessons(branch_id, page)
+            if not schedules['items']:
+                break
+            for schedule in tqdm(schedules['items']):
+                if schedule['related_class'] == 'Group':
+                    continue
+                if schedule['related_id'] not in students_map or not schedule['teacher_ids']:
+                    continue
+                student_id = students_map[schedule['related_id']]
+                if schedule['teacher_ids'][0] not in teacher_map:
+                    continue
+                teacher_id = teacher_map[schedule['teacher_ids'][0]]
+                start_date = schedule['b_date_v']
+                d, m, y = start_date.split('.')
+                start_date = f'{y}-{m}-{d}'
+                end_date = schedule['e_date_v']
+                d, m, y = end_date.split('.')
+                end_date = f'{y}-{m}-{d}'
+                start_time = datetime.strptime(
+                    schedule['time_from_v'], '%H:%M')
+                end_time = datetime.strptime(schedule['time_to_v'], '%H:%M')
+                duration = int((end_time - start_time).total_seconds() / 60)
+                hour = start_time.hour
+                minute = start_time.minute
+                week_day = schedule['day'] - 1
+                course_id = subjects_map[schedule['subject_id']]
+                teacher_name = cnxn.execute(f'''select LastName from Person p 
+                                            where id in (
+                                            select PersonId from Employee e 
+                                            where id in (
+                                            select EmployeeId from EmployeeTeacher et 
+                                            where id = {teacher_id[0]}))''').fetchone()[0]
+                group_name = branch["name"] + f' {teacher_name}'
+                if schedule['related_id'] in indiv_group_map:
+                    group_id = indiv_group_map[schedule['related_id']]
+                    old_course_id = cnxn.execute(f'''SELECT CourseId FROM [Group] WHERE id = {group_id}''').fetchone()[0]
+                    if old_course_id == course_id:
+                        cnxn.execute(f'''INSERT INTO Schedule (GroupId, TeacherId,  Minute, Hour, WeekDay, Duration, StartDate, EndDate, Status)
+                            VALUES ({group_id}, {teacher_id[0]}, {minute}, {hour}, {week_day}, {duration}, '{start_date}', '{end_date}', 0)''')
+                    continue
+                cnxn.execute(f'''INSERT INTO [GROUP] (Name, DisplayName, StartDate, 
+                            CreateDate, CourseId, TeacherId, EventType, GroupStatus, LessonDuration, CityId) 
+                    VALUES ('{group_name}', '{group_name}', '{start_date}', 
+                            '{datetime.now().date()}', {course_id}, {teacher_id[0]}, 1, 0, {duration}, {city_id})''')
+                group_id = cnxn.execute("SELECT SCOPE_IDENTITY()").fetchone()[0]
+                cnxn.execute(f'''INSERT INTO Student2Group (GroupId, StudentId, JoinDate)
+                            VALUES ({group_id}, {student_id}, '{start_date}')''')
+                cnxn.execute(f'''INSERT INTO Schedule (GroupId, TeacherId,  Minute, Hour, WeekDay, Duration, StartDate, EndDate, Status)
+                            VALUES ({group_id}, {teacher_id[0]}, {minute}, {hour}, {week_day}, {duration}, '{start_date}', '{end_date}', 0)''')
+                cnxn.commit()
+                indiv_group_map[schedule['related_id']] = int(group_id)
+            page += 1
+            sleep(10)
+    save_map(indiv_group_map, 'indiv_group')
