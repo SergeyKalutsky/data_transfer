@@ -1,0 +1,104 @@
+{
+    "game": "FlowerDefence",
+    "map": [
+        [
+            0,
+            0,
+            0,
+            0,
+            0
+        ],
+        [
+            4,
+            4,
+            4,
+            4,
+            0
+        ],
+        [
+            4,
+            4,
+            4,
+            4,
+            0
+        ],
+        [
+            4,
+            4,
+            4,
+            4,
+            0
+        ],
+        [
+            0,
+            0,
+            0,
+            0,
+            0
+        ]
+    ],
+    "flowers": 2,
+    "flowersToWin": 2,
+    "coins": 7,
+    "gameEvents": {
+        "name": "start",
+        "amount": 1,
+        "next": [
+            {
+                "name": "attack",
+                "amount": 1,
+                "next": [
+                    {
+                        "name": "attack",
+                        "amount": 1,
+                        "next": [
+                            {
+                                "name": "attack",
+                                "amount": 1,
+                                "next": [
+                                    {
+                                        "name": "attack",
+                                        "amount": 1
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "attack",
+                                "amount": 2,
+                                "next": [
+                                    {
+                                        "name": "attack",
+                                        "amount": 1
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "attack",
+                                "amount": 3,
+                                "next": [
+                                    {
+                                        "name": "attack",
+                                        "amount": 1
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
+    "toolbox": {
+        "kind": "flyoutToolbox",
+        "contents": [
+            {
+                "kind": "block",
+                "type": "condition_if"
+            },
+            {
+                "kind": "block",
+                "type": "action"
+            }
+        ]
+    }
+}

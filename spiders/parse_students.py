@@ -56,16 +56,17 @@ class Crawler(MainSpider):
         a_tags = [a_tag for a_tag in a_tags if 'update' in a_tag['href']]
         i_tags = div.find_all('small', class_='text-lowercase')
         for a, it, card in zip(a_tags, i_tags, cards):
-            row = card.find_all(
-                'div', class_='col-xs-12 text-muted')[0].text.strip()
+            subject = card.find_all('div', class_='col-xs-12 text-muted')[0].text.strip()
+            teacher = card.find_all('div', class_='col-xs-12 text-muted')[1].text.strip()
             day = a.find('big')
             time = a.find('small')
             day = day.text.strip(),
             time = ' '.join([i.strip() for i in time.text.strip().split()]),
             period = it.text.strip().replace('                   ', '')
-            columns = ['student_id', 'day', 'time', 'period', 'subject']
-            data = [student_id, day[0], time[0], period, row]
+            columns = ['student_id', 'day', 'time', 'period', 'subject', 'teacher']
+            data = [student_id, day[0], time[0], period, subject, teacher]
             self._append_csv(data, columns, 'reg_schedule_items_indiv')
+
 
     def _parse_parent(self, soup, student_id):
         span = soup.find('span', {'title': 'Тип клиента - Физ.лицо'})
@@ -81,9 +82,12 @@ class Crawler(MainSpider):
 
     def crawl(self) -> None:
         clients = pd.read_csv('cleaned/clients.csv')
+        clients_parsed = pd.read_csv('student_admins.csv')
         for _, row in clients.iterrows():
             city_id = row['city_id']
             student_id = row['student_id']
+            if clients_parsed[clients_parsed['student_id'] == student_id].shape[0] > 0:
+                continue
             url = f'https://algoritmikakz.s20.online/company/{city_id}/customer/view?id={student_id}'
             # url = 'https://algoritmikakz.s20.online/company/1/customer/view?id=9515'
             print(url)

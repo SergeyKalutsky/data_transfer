@@ -43,15 +43,15 @@ class Crawler(MainSpider):
         a_tags = div.find_all('a', 'crm-ajax-link')
         i_tags = soup.find_all('small', class_='text-lowercase')
         for a, it, card in zip(a_tags, i_tags, cards):
-            row = card.find_all(
-                'div', class_='col-xs-12 text-muted')[0].text.strip()
+            subject = card.find_all('div', class_='col-xs-12 text-muted')[0].text.strip()
+            teacher = card.find_all('div', class_='col-xs-12 text-muted')[1].text.strip()
             day = a.find('big')
             time = a.find('small')
             day = day.text.strip(),
             time = ' '.join([i.strip() for i in time.text.strip().split()]),
             period = it.text.strip().replace('                   ', '')
-            columns = ['group_id', 'day', 'time', 'period', 'subject']
-            data = [group_id, day[0], time[0], period, row]
+            columns = ['group_id', 'day', 'time', 'period', 'subject', 'teacher']
+            data = [group_id, day[0], time[0], period, subject, teacher]
             self._append_csv(data, columns, 'reg_schedules')
 
     def _parse_schedule_items(self, soup, group_id):
